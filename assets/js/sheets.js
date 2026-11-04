@@ -123,9 +123,10 @@
     if (syncBusy) throw new Error("Ya hay una sincronización en curso.");
     syncBusy = true;
     notify("syncing", "Subiendo datos a Google Sheets…", { silent: silent });
+    var data;
+    var failure = null;
     try {
       suppressAuto = true;
-      var data;
       try {
         data = await request("push", null, 45000);
       } finally {
@@ -137,17 +138,20 @@
       c.lastError = "";
       Store.state.meta.cloudUpdatedAt = c.lastSync;
       Store.save({ emit: false });
-      notify("ok", "Datos guardados en Google Sheets.", { at: c.lastSync, silent: silent });
-      return data;
     } catch (err) {
+      failure = err;
       var cc = cfg();
       cc.lastError = err.message;
       Store.save({ emit: false });
-      notify("error", err.message, { silent: silent });
-      throw err;
     } finally {
       syncBusy = false;
     }
+    if (failure) {
+      notify("error", failure.message, { silent: silent });
+      throw failure;
+    }
+    notify("ok", "Datos guardados en Google Sheets.", { at: data.savedAt, silent: silent });
+    return data;
   }
 
   async function pull() {
@@ -155,9 +159,10 @@
     if (syncBusy) throw new Error("Ya hay una sincronización en curso.");
     syncBusy = true;
     notify("syncing", "Descargando datos desde Google Sheets…");
+    var data;
+    var failure = null;
     try {
       suppressAuto = true;
-      var data;
       try {
         data = await request("pull", null, 45000);
       } finally {
@@ -181,17 +186,20 @@
       c.cloudUpdatedAt = c.lastSync;
       Store.state.meta.cloudUpdatedAt = c.lastSync;
       Store.save({ emit: false });
-      notify("ok", "Datos descargados desde Google Sheets.", { at: c.lastSync, pulled: true });
-      return data;
     } catch (err) {
+      failure = err;
       var cc = cfg();
       cc.lastError = err.message;
       Store.save({ emit: false });
-      notify("error", err.message);
-      throw err;
     } finally {
       syncBusy = false;
     }
+    if (failure) {
+      notify("error", failure.message);
+      throw failure;
+    }
+    notify("ok", "Datos descargados desde Google Sheets.", { at: cfg().lastSync, pulled: true });
+    return data;
   }
 
   function scheduleAutoSync() {
