@@ -217,7 +217,7 @@
     const sh = settings.sheets;
     return '<section class="card settings-card" id="settings-sheets">' +
       cardHead("cloud", "Google Sheets", "Copia y sincronización con tu hoja de cálculo") +
-      '<form id="settings-sheets" autocomplete="off">' +
+      '<form id="settings-sheets-form" autocomplete="off">' +
         '<div class="settings-body">' +
           '<div class="sync-status-box" id="settings-sync-status"></div>' +
           '<div class="form-grid">' +
@@ -492,7 +492,7 @@
   }
 
   function saveSheetsForm(emit) {
-    const form = document.getElementById("settings-sheets");
+    const form = document.getElementById("settings-sheets-form");
     if (!form) return false;
     const config = S().settings.sheets;
     config.url = Sheets.normalizeUrl(form.elements.url.value);
@@ -577,7 +577,7 @@
     if (form.id === "settings-currency") return saveCurrency(form);
     if (form.id === "settings-numbering") return saveNumbering(form);
     if (form.id === "settings-billing") return saveBilling(form);
-    if (form.id === "settings-sheets") {
+    if (form.id === "settings-sheets-form") {
       if (saveSheetsForm(true)) PF.toast("Conexión guardada.", "success");
       else PF.toast("Conexión guardada. Faltan la URL o el token para sincronizar.", "warning");
       return;
