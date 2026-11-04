@@ -232,6 +232,14 @@
           }
           break;
 
+        case "import-clients-csv":
+          event.preventDefault();
+          {
+            const input = document.getElementById("import-clients-file");
+            if (input) input.click();
+          }
+          break;
+
         case "reset-data":
           event.preventDefault();
           PF.resetData();
@@ -334,6 +342,9 @@
     }
     if (target.id === "import-file") {
       PF.importJSONFile(target);
+    }
+    if (target.id === "import-clients-file") {
+      PF.importClientsCSVFile(target);
     }
   });
 

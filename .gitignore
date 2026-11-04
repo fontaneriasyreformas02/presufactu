@@ -17,3 +17,9 @@ build/
 # Archivos locales y temporales
 *.log
 *.tmp
+
+# Datos de clientes (nunca subir a GitHub)
+*.csv
+*.xlsx
+*.xls
+clientes.*

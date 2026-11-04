@@ -310,7 +310,10 @@
         '<div class="btn-row">' +
           '<input type="file" id="import-file" accept="application/json,.json" class="hidden">' +
           '<button type="button" class="btn" data-action="import-json">' + icon("upload") + " Restaurar copia JSON</button>" +
+          '<input type="file" id="import-clients-file" accept=".csv,text/csv" class="hidden">' +
+          '<button type="button" class="btn" data-action="import-clients-csv">' + icon("users") + " Importar clientes (CSV)</button>" +
         "</div>" +
+        '<p class="muted small">El CSV de clientes debe llevar una fila de cabecera con columnas como Nombre, NIF/CIF, Dirección, Móvil, Teléfono, Email, CP, Ciudad, País o Notas. Se aceptan separadores «;» y «,».</p>' +
         '<p class="muted small">Al restaurar una copia se reemplazan todos los datos actuales de este dispositivo. Si tienes la sincronización automática activada, la copia también se subirá a Google Sheets.</p>' +
       "</div>" +
       '<div class="settings-body danger-zone" style="border-top:1px solid var(--border)">' +
@@ -715,6 +718,37 @@
     }
   }
 
+  async function importClientsCSVFile(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const rows = Store.parseCSV(text);
+      const list = Store.mapClientRows(rows);
+      if (!list.length) {
+        throw new Error("No se han encontrado clientes en el archivo CSV.");
+      }
+      const ok = await PF.confirmDialog({
+        title: "Importar clientes",
+        message: "Se añadirán <strong>" + list.length + "</strong> clientes desde el archivo. Los que ya existan (mismo nombre y NIF) se omitirán.",
+        confirmText: "Importar"
+      });
+      if (!ok) return;
+      const result = Store.importClients(list);
+      PF.updateShell();
+      PF.go("clientes");
+      PF.toast(
+        result.added + (result.added === 1 ? " cliente importado" : " clientes importados") +
+        (result.skipped ? ". " + result.skipped + " omitidos (duplicados o sin nombre)." : "."),
+        result.added ? "success" : "info"
+      );
+    } catch (err) {
+      PF.toast(err.message || "No se pudo importar el archivo CSV.", "error");
+    } finally {
+      input.value = "";
+    }
+  }
+
   async function resetData() {
     const ok = await PF.confirmDialog({
       title: "Borrar datos locales",
@@ -747,6 +781,7 @@
     syncNow: syncNow,
     exportJSON: exportJSON,
     importJSONFile: importJSONFile,
+    importClientsCSVFile: importClientsCSVFile,
     resetData: resetData
   });
 })();

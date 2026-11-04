@@ -666,6 +666,168 @@
     return state;
   }
 
+  /* ---------------- Importación de clientes (CSV) ---------------- */
+
+  function parseCSV(text) {
+    var clean = String(text || "").replace(/^\ufeff/, "");
+    var firstLine = clean.split(/\r?\n/)[0] || "";
+    var delimiter = ";";
+    [";", ",", "\t"].forEach(function (candidate) {
+      if (firstLine.split(candidate).length > firstLine.split(delimiter).length) delimiter = candidate;
+    });
+
+    var rows = [];
+    var row = [];
+    var field = "";
+    var quoted = false;
+
+    for (var i = 0; i < clean.length; i++) {
+      var ch = clean.charAt(i);
+      if (quoted) {
+        if (ch === '"') {
+          if (clean.charAt(i + 1) === '"') {
+            field += '"';
+            i++;
+          } else {
+            quoted = false;
+          }
+        } else {
+          field += ch;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        quoted = true;
+      } else if (ch === delimiter) {
+        row.push(field);
+        field = "";
+      } else if (ch === "\n") {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+      } else if (ch !== "\r") {
+        field += ch;
+      }
+    }
+    if (field !== "" || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows.filter(function (cells) {
+      return cells.some(function (cell) { return String(cell).trim() !== ""; });
+    });
+  }
+
+  function headerKey(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  var CLIENT_COLUMNS = {
+    name: ["nombre", "nombrecliente", "cliente", "razonsocial", "name"],
+    nif: ["nifcif", "nif", "cif", "dni", "nit", "vat"],
+    address: ["direccion", "domicilio", "address"],
+    mobile: ["movil", "movil1", "celular", "mobile"],
+    phone: ["telefono", "telefonos", "tlf", "phone", "tel"],
+    email: ["email", "correo", "correoelectronico", "mail"],
+    zip: ["cp", "codigopostal", "zip", "postal"],
+    city: ["ciudad", "poblacion", "localidad", "city"],
+    country: ["pais", "country"],
+    notes: ["notas", "notes", "observaciones"]
+  };
+
+  function matchColumn(key) {
+    var found = "";
+    Object.keys(CLIENT_COLUMNS).forEach(function (field) {
+      if (found) return;
+      if (CLIENT_COLUMNS[field].indexOf(key) !== -1) found = field;
+    });
+    return found;
+  }
+
+  function mapClientRows(rows) {
+    if (!rows || !rows.length) return [];
+    var header = rows[0].map(headerKey);
+    var recognized = header.filter(function (key) { return matchColumn(key); }).length;
+    var hasHeader = recognized >= 2;
+    var order = ["name", "nif", "address", "mobile", "phone", "email", "notes"];
+    var columns = hasHeader ? header.map(matchColumn) : order.slice();
+    var dataRows = hasHeader ? rows.slice(1) : rows;
+
+    return dataRows.map(function (cells) {
+      var record = {};
+      columns.forEach(function (field, index) {
+        if (!field) return;
+        var value = String(cells[index] === undefined ? "" : cells[index]).trim();
+        if (value) record[field] = value;
+      });
+      return record;
+    }).filter(function (record) { return record.name; });
+  }
+
+  function clientKey(client) {
+    var name = String(client.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    var nif = String(client.nif || "").trim().toLowerCase().replace(/[\s.\-]/g, "");
+    return name + "|" + nif;
+  }
+
+  function importClients(list) {
+    var now = new Date().toISOString();
+    var seen = {};
+    state.clients.forEach(function (client) {
+      if (!client.deletedAt) seen[clientKey(client)] = true;
+    });
+
+    var added = 0;
+    var skipped = 0;
+
+    (list || []).forEach(function (item) {
+      var name = String(item.name || "").trim().replace(/\s+/g, " ");
+      if (!name) {
+        skipped++;
+        return;
+      }
+      var notes = String(item.notes || "").trim();
+      var mobile = String(item.mobile || "").trim();
+      var landline = String(item.phone || "").trim();
+      var phone = mobile || landline;
+      if (mobile && landline && mobile !== landline) {
+        notes = (notes ? notes + " · " : "") + "Teléfono fijo: " + landline;
+      }
+
+      var client = {
+        id: uid("cli_"),
+        createdAt: now,
+        updatedAt: now,
+        name: name,
+        nif: String(item.nif || "").trim(),
+        email: String(item.email || "").trim(),
+        phone: phone,
+        address: String(item.address || "").trim(),
+        zip: String(item.zip || "").trim(),
+        city: String(item.city || "").trim(),
+        country: String(item.country || "").trim(),
+        notes: notes
+      };
+
+      var key = clientKey(client);
+      if (seen[key]) {
+        skipped++;
+        return;
+      }
+      seen[key] = true;
+      state.clients.push(client);
+      added++;
+    });
+
+    if (added) save();
+    return { added: added, skipped: skipped };
+  }
+
   var Store = {
     init: function () {
       load();
@@ -710,6 +872,9 @@
     documentsCSV: documentsCSV,
     backupJSON: backupJSON,
     importJSON: importJSON,
+    parseCSV: parseCSV,
+    mapClientRows: mapClientRows,
+    importClients: importClients,
     download: download,
     sanitizeState: sanitizeState,
     replaceState: function (newState) {
