@@ -174,7 +174,7 @@
   /* ========================= FORMULARIO ========================= */
 
   function emptyLine(vat) {
-    return { id: Store.uid("ln_"), description: "", qty: 1, price: 0, discount: 0, vat: vat === undefined ? Store.defaultVatRate() : vat };
+    return { id: Store.uid("ln_"), description: "", qty: 1, price: 0, discount: 0, vat: vat === undefined ? 0 : vat };
   }
 
   function blankDoc(type, template) {
@@ -272,7 +272,13 @@
             '<div class="form-section">' +
               '<div class="form-section-title">Cliente</div>' +
               '<div class="client-picker">' +
-                '<label class="field"><span>Cliente *</span><select name="clientId">' + PF.clientOptions(doc.clientId) + "</select></label>" +
+                '<label class="field"><span>Cliente *</span>' +
+                  '<div class="client-combo">' +
+                    '<input type="text" id="client-search" class="client-search" placeholder="Busca por nombre, NIF, email o ciudad…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="client-results" aria-autocomplete="list">' +
+                    '<input type="hidden" name="clientId" value="' + esc(doc.clientId) + '">' +
+                    '<div class="client-results hidden" id="client-results" role="listbox"></div>' +
+                  "</div>" +
+                "</label>" +
                 '<button type="button" class="btn" data-action="quick-client">' + icon("plus") + " Nuevo</button>" +
               "</div>" +
               '<div id="client-hint" class="small muted"></div>' +
@@ -336,8 +342,141 @@
         '<button type="submit" form="doc-form" class="btn btn-primary">' + (isEdit ? "Guardar cambios" : "Crear " + meta.label.toLowerCase()) + "</button>"
     });
 
-    refreshClientHint();
+    initClientSearch(doc.clientId);
     recalcDocForm();
+  }
+
+  /* ========================= BUSCADOR DE CLIENTES ========================= */
+
+  function clientList(selectedId) {
+    return S().clients
+      .filter(function (c) { return !c.deletedAt || c.id === selectedId; })
+      .sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || ""), "es"); });
+  }
+
+  function clientMatches(client, term) {
+    if (!term) return true;
+    const haystack = [client.name, client.nif, client.email, client.phone, client.city, client.zip]
+      .join(" ").toLowerCase();
+    return term.toLowerCase().split(/\s+/).every(function (part) {
+      return part && haystack.indexOf(part) !== -1;
+    });
+  }
+
+  function initClientSearch(selectedId) {
+    const input = document.getElementById("client-search");
+    const hidden = document.querySelector('#doc-form input[name="clientId"]');
+    const box = document.getElementById("client-results");
+    if (!input || !hidden || !box) return;
+
+    let active = -1;
+
+    const selectedClient = function () {
+      return clientList(hidden.value).filter(function (c) { return c.id === hidden.value; })[0] || null;
+    };
+
+    const syncInput = function () {
+      const client = selectedClient();
+      input.value = client ? client.name : "";
+    };
+
+    const hide = function () {
+      box.classList.add("hidden");
+      input.setAttribute("aria-expanded", "false");
+      active = -1;
+    };
+
+    const choose = function (id) {
+      hidden.value = id || "";
+      syncInput();
+      hide();
+      refreshClientHint();
+    };
+
+    const render = function (term) {
+      const list = clientList(hidden.value).filter(function (c) { return clientMatches(c, term); }).slice(0, 50);
+      active = -1;
+      if (!list.length) {
+        box.innerHTML = '<div class="client-empty">Sin resultados. Puedes crear el cliente con «Nuevo».</div>';
+      } else {
+        box.innerHTML = list.map(function (client) {
+          const meta = [client.nif, client.city || client.email].filter(Boolean).join(" · ");
+          return '<button type="button" class="client-option" role="option" data-id="' + esc(client.id) + '">' +
+            '<span class="client-option-name">' + esc(client.name) + "</span>" +
+            (meta ? '<span class="client-option-meta">' + esc(meta) + "</span>" : "") +
+            "</button>";
+        }).join("");
+      }
+      box.classList.remove("hidden");
+      input.setAttribute("aria-expanded", "true");
+    };
+
+    input.addEventListener("focus", function () {
+      render(hidden.value ? "" : input.value);
+      input.select();
+    });
+
+    input.addEventListener("input", function () {
+      hidden.value = "";
+      refreshClientHint();
+      render(input.value);
+    });
+
+    input.addEventListener("keydown", function (event) {
+      const options = $$(".client-option", box);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (box.classList.contains("hidden")) {
+          render(input.value);
+          return;
+        }
+        if (!options.length) return;
+        event.preventDefault();
+        active = event.key === "ArrowDown"
+          ? (active + 1) % options.length
+          : (active - 1 + options.length) % options.length;
+        options.forEach(function (option, index) {
+          option.classList.toggle("active", index === active);
+        });
+        options[active].scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (event.key === "Enter" && !box.classList.contains("hidden") && options.length) {
+        event.preventDefault();
+        choose(options[active >= 0 ? active : 0].getAttribute("data-id"));
+        return;
+      }
+      if (event.key === "Escape" && !box.classList.contains("hidden")) {
+        event.preventDefault();
+        event.stopPropagation();
+        hide();
+        syncInput();
+      }
+    });
+
+    box.addEventListener("mousedown", function (event) { event.preventDefault(); });
+    box.addEventListener("click", function (event) {
+      const option = event.target.closest(".client-option");
+      if (option) choose(option.getAttribute("data-id"));
+    });
+
+    input.addEventListener("blur", function () {
+      setTimeout(function () {
+        hide();
+        syncInput();
+      }, 120);
+    });
+
+    syncInput();
+    refreshClientHint();
+  }
+
+  function setDocumentClient(id) {
+    const hidden = document.querySelector('#doc-form input[name="clientId"]');
+    const input = document.getElementById("client-search");
+    const client = Store.getClient(id);
+    if (hidden) hidden.value = client ? client.id : "";
+    if (input) input.value = client ? client.name : "";
+    refreshClientHint();
   }
 
   function readLine(row) {
@@ -760,6 +899,7 @@
     saveDocForm: saveDocForm,
     recalcDocForm: recalcDocForm,
     refreshClientHint: refreshClientHint,
+    setDocumentClient: setDocumentClient,
     addLine: addLine,
     removeLine: removeLine,
     openPreview: openPreview,

@@ -753,13 +753,8 @@
     toast(id ? "Cliente actualizado." : "Cliente creado.", "success");
 
     if (quick) {
-      const select = document.querySelector('#doc-form select[name="clientId"]');
-      if (select) {
-        select.innerHTML = clientOptions(saved.id);
-        select.value = saved.id;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      if (PF.refreshClientHint) PF.refreshClientHint();
+      if (PF.setDocumentClient) PF.setDocumentClient(saved.id);
+      else if (PF.refreshClientHint) PF.refreshClientHint();
     }
     updateShell();
     if (route === "clientes") refreshClients();
