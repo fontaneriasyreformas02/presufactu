@@ -233,7 +233,7 @@
             '<label class="inline-check span-2"><input type="checkbox" name="auto"' + (sh.auto ? " checked" : "") + ">" +
               "<span>Subir automáticamente al guardar<span class=\"hint\">Envía los cambios a Google Sheets 2 segundos después de cada modificación.</span></span></label>" +
           "</div>" +
-          '<p class="muted small">Al abrir la aplicación se comprueba la hoja de Google y se descargan los cambios si son más recientes, sin necesidad de pulsar «Descargar de Sheets». Si tienes cambios locales sin subir, no se descarga nada para no perderlos.</p>' +
+          '<p class="muted small">Al abrir la aplicación y al volver a esta pestaña se comprueba la hoja de Google y se descargan los cambios si son más recientes, sin necesidad de pulsar «Descargar de Sheets». Si este dispositivo no tiene ningún documento, se cargan los de la hoja automáticamente. Si tienes cambios locales sin subir, no se descarga nada para no perderlos.</p>' +
           '<div class="btn-row">' +
             '<button type="button" class="btn" data-action="test-sync">' + icon("refresh") + " Probar conexión</button>" +
             '<button type="button" class="btn btn-soft" data-action="push-sync">' + icon("upload") + " Subir a Sheets</button>" +

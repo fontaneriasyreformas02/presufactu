@@ -197,7 +197,9 @@
   }
 
   function save(options) {
-    state.meta.updatedAt = new Date().toISOString();
+    if (!options || options.touchMeta !== false) {
+      state.meta.updatedAt = new Date().toISOString();
+    }
     if ((!options || options.emit !== false) && state.settings && state.settings.sheets) {
       state.settings.sheets.dirty = true;
     }
@@ -884,7 +886,7 @@
     replaceState: function (newState) {
       state = sanitizeState(newState);
       recalculateCounters();
-      save({ emit: false });
+      save({ emit: false, touchMeta: false });
     },
     resetAll: function () {
       localStorage.removeItem(STATE_KEY);

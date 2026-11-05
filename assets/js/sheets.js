@@ -139,12 +139,13 @@
       c.lastError = "";
       c.dirty = false;
       Store.state.meta.cloudUpdatedAt = c.lastSync;
-      Store.save({ emit: false });
+      Store.state.meta.updatedAt = c.lastSync;
+      Store.save({ emit: false, touchMeta: false });
     } catch (err) {
       failure = err;
       var cc = cfg();
       cc.lastError = err.message;
-      Store.save({ emit: false });
+      Store.save({ emit: false, touchMeta: false });
     } finally {
       syncBusy = false;
     }
@@ -167,6 +168,9 @@
     incoming.settings.sheets.cloudUpdatedAt = data.savedAt || "";
     incoming.settings.sheets.lastError = "";
     incoming.settings.sheets.dirty = false;
+    incoming.meta = incoming.meta || {};
+    incoming.meta.updatedAt = data.savedAt || new Date().toISOString();
+    incoming.meta.cloudUpdatedAt = data.savedAt || "";
     Store.replaceState(incoming);
     var c = cfg();
     c.lastSync = data.savedAt || new Date().toISOString();
@@ -174,7 +178,8 @@
     c.lastError = "";
     c.dirty = false;
     Store.state.meta.cloudUpdatedAt = c.lastSync;
-    Store.save({ emit: false });
+    Store.state.meta.updatedAt = c.lastSync;
+    Store.save({ emit: false, touchMeta: false });
   }
 
   async function pull(options) {
@@ -208,8 +213,14 @@
       notify("error", failure.message, { silent: silent });
       throw failure;
     }
-    notify("ok", "Datos descargados desde Google Sheets.", { at: cfg().lastSync, pulled: true, silent: silent });
+    notify("ok", syncSummary("Datos descargados desde Google Sheets"), { at: cfg().lastSync, pulled: true, silent: silent });
     return data;
+  }
+
+  function syncSummary(prefix) {
+    var clients = (Store.state.clients || []).filter(function (c) { return !c.deletedAt; }).length;
+    var docs = (Store.state.documents || []).filter(function (d) { return !d.deletedAt; }).length;
+    return prefix + ": " + clients + " clientes y " + docs + (docs === 1 ? " documento." : " documentos.");
   }
 
   function isNewer(cloudAt, localAt) {
@@ -220,40 +231,52 @@
     return cloud > local;
   }
 
-  /* Al abrir la app: trae los datos de la hoja si son más recientes.
-     No toca nada si hay cambios locales pendientes de subir. */
-  async function syncOnStart() {
+  /* Al abrir la app (o al volver a la pestaña): trae los datos de la hoja
+     si son más recientes. No toca nada si hay cambios locales sin subir,
+     salvo que este dispositivo no tenga ningún documento y la nube sí. */
+  async function syncOnStart(options) {
     if (!hasConfig() || syncBusy) return null;
+    if (typeof document !== "undefined" && document.hidden) return null;
+    if (typeof document !== "undefined" && document.querySelector("#modal-root .modal-overlay")) return null;
+
     var c = cfg();
-    if (c.dirty) return null;
+    var localDocs = (Store.state.documents || []).length;
+    if (c.dirty && localDocs > 0) return null;
 
     var data;
     try {
       data = await request("pull", null, 20000);
     } catch (err) {
       c.lastError = err.message;
-      Store.save({ emit: false });
+      Store.save({ emit: false, touchMeta: false });
       return null;
     }
     if (!data || !data.state) return null;
-    if (cfg().dirty) return null;
 
-    var localAt = c.lastSync || "";
-    var localUpdated = (Store.state.meta && Store.state.meta.updatedAt) || "";
-    if (localAt && localUpdated) {
-      var lu = Date.parse(localUpdated);
-      var la = Date.parse(localAt);
-      if (isFinite(lu) && isFinite(la) && lu > la + 120000) return null;
+    var cloudDocs = (data.state.documents || []).length;
+    var adoptEmpty = localDocs === 0 && cloudDocs > 0;
+    if (cfg().dirty && !adoptEmpty) return null;
+
+    var localAt = (Store.state.meta && Store.state.meta.updatedAt) || c.lastSync || "";
+    var hasLocal = (Store.state.clients || []).length || localDocs;
+    if (!adoptEmpty && hasLocal) {
+      if (!localAt) return null;
+      if (!isNewer(data.savedAt, localAt)) return null;
     }
-    if (!localAt) {
-      var hasLocal = (Store.state.clients || []).length || (Store.state.documents || []).length;
-      if (hasLocal) return null;
-    } else if (!isNewer(data.savedAt, localAt)) {
-      return null;
+
+    if (adoptEmpty) {
+      var ids = {};
+      (data.state.clients || []).forEach(function (client) { ids[client.id] = true; });
+      (Store.state.clients || []).forEach(function (client) {
+        if (!ids[client.id]) {
+          data.state.clients.push(client);
+          ids[client.id] = true;
+        }
+      });
     }
 
     applyPulledState(data);
-    notify("ok", "Datos actualizados desde Google Sheets.", { at: cfg().lastSync, pulled: true });
+    notify("ok", syncSummary("Datos actualizados desde Google Sheets"), { at: cfg().lastSync, pulled: true });
     return data;
   }
 
@@ -273,6 +296,18 @@
     initialized = true;
     window.addEventListener("presufactu:saved", function () {
       if (!suppressAuto) scheduleAutoSync();
+    });
+    var lastCheck = 0;
+    function checkCloud() {
+      if (document.hidden) return;
+      var now = Date.now();
+      if (now - lastCheck < 15000) return;
+      lastCheck = now;
+      syncOnStart().catch(function () { /* silencioso */ });
+    }
+    window.addEventListener("focus", checkCloud);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) checkCloud();
     });
   }
 
