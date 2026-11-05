@@ -243,41 +243,46 @@
     var localDocs = (Store.state.documents || []).length;
     if (c.dirty && localDocs > 0) return null;
 
-    var data;
+    syncBusy = true;
     try {
-      data = await request("pull", null, 20000);
-    } catch (err) {
-      c.lastError = err.message;
-      Store.save({ emit: false, touchMeta: false });
-      return null;
+      var data;
+      try {
+        data = await request("pull", null, 20000);
+      } catch (err) {
+        c.lastError = err.message;
+        Store.save({ emit: false, touchMeta: false });
+        return null;
+      }
+      if (!data || !data.state) return null;
+
+      var cloudDocs = (data.state.documents || []).length;
+      var adoptEmpty = localDocs === 0 && cloudDocs > 0;
+      if (cfg().dirty && !adoptEmpty) return null;
+
+      var localAt = (Store.state.meta && Store.state.meta.updatedAt) || c.lastSync || "";
+      var hasLocal = (Store.state.clients || []).length || localDocs;
+      if (!adoptEmpty && hasLocal) {
+        if (!localAt) return null;
+        if (!isNewer(data.savedAt, localAt)) return null;
+      }
+
+      if (adoptEmpty) {
+        var ids = {};
+        (data.state.clients || []).forEach(function (client) { ids[client.id] = true; });
+        (Store.state.clients || []).forEach(function (client) {
+          if (!ids[client.id]) {
+            data.state.clients.push(client);
+            ids[client.id] = true;
+          }
+        });
+      }
+
+      applyPulledState(data);
+      notify("ok", syncSummary("Datos actualizados desde Google Sheets"), { at: cfg().lastSync, pulled: true });
+      return data;
+    } finally {
+      syncBusy = false;
     }
-    if (!data || !data.state) return null;
-
-    var cloudDocs = (data.state.documents || []).length;
-    var adoptEmpty = localDocs === 0 && cloudDocs > 0;
-    if (cfg().dirty && !adoptEmpty) return null;
-
-    var localAt = (Store.state.meta && Store.state.meta.updatedAt) || c.lastSync || "";
-    var hasLocal = (Store.state.clients || []).length || localDocs;
-    if (!adoptEmpty && hasLocal) {
-      if (!localAt) return null;
-      if (!isNewer(data.savedAt, localAt)) return null;
-    }
-
-    if (adoptEmpty) {
-      var ids = {};
-      (data.state.clients || []).forEach(function (client) { ids[client.id] = true; });
-      (Store.state.clients || []).forEach(function (client) {
-        if (!ids[client.id]) {
-          data.state.clients.push(client);
-          ids[client.id] = true;
-        }
-      });
-    }
-
-    applyPulledState(data);
-    notify("ok", syncSummary("Datos actualizados desde Google Sheets"), { at: cfg().lastSync, pulled: true });
-    return data;
   }
 
   function scheduleAutoSync() {
