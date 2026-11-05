@@ -110,7 +110,8 @@
         auto: false,
         lastSync: "",
         lastError: "",
-        cloudUpdatedAt: ""
+        cloudUpdatedAt: "",
+        dirty: false
       },
       theme: "light"
     },
@@ -197,6 +198,9 @@
 
   function save(options) {
     state.meta.updatedAt = new Date().toISOString();
+    if ((!options || options.emit !== false) && state.settings && state.settings.sheets) {
+      state.settings.sheets.dirty = true;
+    }
     persist();
     if (!options || options.emit !== false) emitSaved();
   }
@@ -880,7 +884,7 @@
     replaceState: function (newState) {
       state = sanitizeState(newState);
       recalculateCounters();
-      save();
+      save({ emit: false });
     },
     resetAll: function () {
       localStorage.removeItem(STATE_KEY);

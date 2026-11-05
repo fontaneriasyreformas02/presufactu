@@ -435,6 +435,7 @@
     document.getElementById("app").classList.remove("hidden");
     applyTheme(S().settings.theme);
     Sheets.init();
+    if (Sheets.syncOnStart) Sheets.syncOnStart();
     updateShell();
     renderRoute(currentRouteName());
     startIdleWatch();

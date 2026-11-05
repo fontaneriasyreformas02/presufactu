@@ -379,6 +379,11 @@
   window.addEventListener("presufactu:sync", function (event) {
     const detail = event.detail || {};
     PF.updateSyncUI();
+    if (detail.pulled) {
+      PF.applyTheme(Store.state.settings.theme);
+      PF.updateShell();
+      PF.renderRoute(PF.currentRouteName());
+    }
     if (detail.status === "error" && detail.message) {
       PF.toast(detail.message, "error");
     } else if (detail.status === "ok" && detail.message && !detail.silent) {

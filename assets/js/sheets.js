@@ -64,6 +64,7 @@
       if (stateCopy.settings && stateCopy.settings.sheets) {
         stateCopy.settings.sheets.token = "";
         stateCopy.settings.sheets.url = "";
+        stateCopy.settings.sheets.dirty = false;
       }
       options = {
         method: "POST",
@@ -136,6 +137,7 @@
       c.lastSync = data.savedAt || new Date().toISOString();
       c.cloudUpdatedAt = c.lastSync;
       c.lastError = "";
+      c.dirty = false;
       Store.state.meta.cloudUpdatedAt = c.lastSync;
       Store.save({ emit: false });
     } catch (err) {
@@ -154,11 +156,33 @@
     return data;
   }
 
-  async function pull() {
+  function applyPulledState(data) {
+    var incoming = data.state;
+    var localSheets = Store.clone(cfg());
+    incoming = Store.sanitizeState(incoming);
+    incoming.settings.sheets.url = localSheets.url;
+    incoming.settings.sheets.token = localSheets.token;
+    incoming.settings.sheets.auto = localSheets.auto;
+    incoming.settings.sheets.lastSync = data.savedAt || new Date().toISOString();
+    incoming.settings.sheets.cloudUpdatedAt = data.savedAt || "";
+    incoming.settings.sheets.lastError = "";
+    incoming.settings.sheets.dirty = false;
+    Store.replaceState(incoming);
+    var c = cfg();
+    c.lastSync = data.savedAt || new Date().toISOString();
+    c.cloudUpdatedAt = c.lastSync;
+    c.lastError = "";
+    c.dirty = false;
+    Store.state.meta.cloudUpdatedAt = c.lastSync;
+    Store.save({ emit: false });
+  }
+
+  async function pull(options) {
+    var silent = !!(options && options.silent);
     if (!hasConfig()) throw new Error("Configura la URL y el token de Google Sheets.");
     if (syncBusy) throw new Error("Ya hay una sincronización en curso.");
     syncBusy = true;
-    notify("syncing", "Descargando datos desde Google Sheets…");
+    notify("syncing", "Descargando datos desde Google Sheets…", { silent: silent });
     var data;
     var failure = null;
     try {
@@ -171,21 +195,7 @@
       if (!data.state) {
         throw new Error("La hoja de Google no contiene datos guardados todavía.");
       }
-      var incoming = data.state;
-      var localSheets = Store.clone(cfg());
-      incoming = Store.sanitizeState(incoming);
-      incoming.settings.sheets.url = localSheets.url;
-      incoming.settings.sheets.token = localSheets.token;
-      incoming.settings.sheets.auto = localSheets.auto;
-      incoming.settings.sheets.lastSync = data.savedAt || new Date().toISOString();
-      incoming.settings.sheets.cloudUpdatedAt = data.savedAt || "";
-      incoming.settings.sheets.lastError = "";
-      Store.replaceState(incoming);
-      var c = cfg();
-      c.lastSync = data.savedAt || new Date().toISOString();
-      c.cloudUpdatedAt = c.lastSync;
-      Store.state.meta.cloudUpdatedAt = c.lastSync;
-      Store.save({ emit: false });
+      applyPulledState(data);
     } catch (err) {
       failure = err;
       var cc = cfg();
@@ -195,10 +205,55 @@
       syncBusy = false;
     }
     if (failure) {
-      notify("error", failure.message);
+      notify("error", failure.message, { silent: silent });
       throw failure;
     }
-    notify("ok", "Datos descargados desde Google Sheets.", { at: cfg().lastSync, pulled: true });
+    notify("ok", "Datos descargados desde Google Sheets.", { at: cfg().lastSync, pulled: true, silent: silent });
+    return data;
+  }
+
+  function isNewer(cloudAt, localAt) {
+    var cloud = Date.parse(cloudAt);
+    if (!isFinite(cloud)) return false;
+    var local = Date.parse(localAt);
+    if (!isFinite(local)) return true;
+    return cloud > local;
+  }
+
+  /* Al abrir la app: trae los datos de la hoja si son más recientes.
+     No toca nada si hay cambios locales pendientes de subir. */
+  async function syncOnStart() {
+    if (!hasConfig() || syncBusy) return null;
+    var c = cfg();
+    if (c.dirty) return null;
+
+    var data;
+    try {
+      data = await request("pull", null, 20000);
+    } catch (err) {
+      c.lastError = err.message;
+      Store.save({ emit: false });
+      return null;
+    }
+    if (!data || !data.state) return null;
+    if (cfg().dirty) return null;
+
+    var localAt = c.lastSync || "";
+    var localUpdated = (Store.state.meta && Store.state.meta.updatedAt) || "";
+    if (localAt && localUpdated) {
+      var lu = Date.parse(localUpdated);
+      var la = Date.parse(localAt);
+      if (isFinite(lu) && isFinite(la) && lu > la + 120000) return null;
+    }
+    if (!localAt) {
+      var hasLocal = (Store.state.clients || []).length || (Store.state.documents || []).length;
+      if (hasLocal) return null;
+    } else if (!isNewer(data.savedAt, localAt)) {
+      return null;
+    }
+
+    applyPulledState(data);
+    notify("ok", "Datos actualizados desde Google Sheets.", { at: cfg().lastSync, pulled: true });
     return data;
   }
 
@@ -227,6 +282,7 @@
     ping: ping,
     push: push,
     pull: pull,
+    syncOnStart: syncOnStart,
     isBusy: function () { return syncBusy; },
     scheduleAutoSync: scheduleAutoSync,
     normalizeUrl: normalizeUrl

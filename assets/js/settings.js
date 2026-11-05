@@ -231,8 +231,9 @@
               "</div>" +
               '<span class="hint">Debe coincidir con la constante <code>TOKEN</code> de tu Apps Script.</span></label>' +
             '<label class="inline-check span-2"><input type="checkbox" name="auto"' + (sh.auto ? " checked" : "") + ">" +
-              "<span>Sincronización automática al guardar<span class=\"hint\">Sube los cambios a Google Sheets 2 segundos después de cada modificación.</span></span></label>" +
+              "<span>Subir automáticamente al guardar<span class=\"hint\">Envía los cambios a Google Sheets 2 segundos después de cada modificación.</span></span></label>" +
           "</div>" +
+          '<p class="muted small">Al abrir la aplicación se comprueba la hoja de Google y se descargan los cambios si son más recientes, sin necesidad de pulsar «Descargar de Sheets». Si tienes cambios locales sin subir, no se descarga nada para no perderlos.</p>' +
           '<div class="btn-row">' +
             '<button type="button" class="btn" data-action="test-sync">' + icon("refresh") + " Probar conexión</button>" +
             '<button type="button" class="btn btn-soft" data-action="push-sync">' + icon("upload") + " Subir a Sheets</button>" +
