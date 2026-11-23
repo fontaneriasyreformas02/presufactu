@@ -128,6 +128,11 @@
           PF.addLine();
           break;
 
+        case "add-text-line":
+          event.preventDefault();
+          PF.addLine(true);
+          break;
+
         case "remove-line":
           event.preventDefault();
           PF.removeLine(target);

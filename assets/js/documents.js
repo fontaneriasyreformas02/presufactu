@@ -174,7 +174,7 @@
   /* ========================= FORMULARIO ========================= */
 
   function emptyLine(vat) {
-    return { id: Store.uid("ln_"), description: "", qty: 1, price: 0, discount: 0, vat: vat === undefined ? 0 : vat };
+    return { id: Store.uid("ln_"), description: "", qty: 1, price: 0, discount: 0, vat: vat === undefined ? 0 : vat, textOnly: false };
   }
 
   function blankDoc(type, template) {
@@ -205,7 +205,8 @@
               qty: Store.num(line.qty),
               price: Store.num(line.price),
               discount: Store.num(line.discount),
-              vat: Store.num(line.vat)
+              vat: Store.num(line.vat),
+              textOnly: !!line.textOnly
             };
           })
         : [emptyLine()]
@@ -239,15 +240,39 @@
   }
 
   function lineRowHTML(line) {
-    return '<tr class="line-row" data-line-id="' + esc(line.id) + '">' +
-      '<td><input type="text" class="ln-desc" value="' + esc(line.description) + '" placeholder="Descripción del servicio o producto" aria-label="Descripción"></td>' +
-      '<td><input type="number" class="ln-qty" value="' + esc(line.qty) + '" step="0.01" min="0" aria-label="Cantidad"></td>' +
-      '<td><input type="number" class="ln-price" value="' + esc(line.price) + '" step="0.01" min="0" aria-label="Precio"></td>' +
-      '<td><input type="number" class="ln-discount" value="' + esc(line.discount) + '" step="0.01" min="0" max="100" aria-label="Descuento"></td>' +
-      '<td><select class="ln-vat" aria-label="IVA">' + vatOptions(line.vat) + "</select></td>" +
-      '<td class="num line-total nowrap">—</td>' +
+    const textOnly = !!line.textOnly;
+    const hidden = textOnly ? " hidden" : "";
+    return '<tr class="line-row' + (textOnly ? " is-text-only" : "") + '" data-line-id="' + esc(line.id) + '">' +
+      '<td class="ln-desc-cell"' + (textOnly ? ' colspan="6"' : "") + ">" +
+        '<div class="ln-desc-wrap">' +
+          '<label class="ln-text-flag" title="Línea de solo texto: sin cantidad, precio ni subtotal">' +
+            '<input type="checkbox" class="ln-text-only"' + (textOnly ? " checked" : "") + "> Solo texto" +
+          "</label>" +
+          '<input type="text" class="ln-desc" value="' + esc(line.description) + '" placeholder="Descripción del servicio o producto" aria-label="Descripción">' +
+        "</div>" +
+      "</td>" +
+      '<td class="ln-num-cell' + hidden + '"><input type="number" class="ln-qty" value="' + esc(line.qty) + '" step="0.01" min="0" aria-label="Cantidad"></td>' +
+      '<td class="ln-num-cell' + hidden + '"><input type="number" class="ln-price" value="' + esc(line.price) + '" step="0.01" min="0" aria-label="Precio"></td>' +
+      '<td class="ln-num-cell' + hidden + '"><input type="number" class="ln-discount" value="' + esc(line.discount) + '" step="0.01" min="0" max="100" aria-label="Descuento"></td>' +
+      '<td class="ln-num-cell' + hidden + '"><select class="ln-vat" aria-label="IVA">' + vatOptions(line.vat) + "</select></td>" +
+      '<td class="ln-num-cell num line-total nowrap' + hidden + '">—</td>' +
       '<td><button type="button" class="icon-btn tiny danger" data-action="remove-line" title="Quitar línea">' + icon("trash") + "</button></td>" +
     "</tr>";
+  }
+
+  function applyLineMode(row) {
+    const toggle = row.querySelector(".ln-text-only");
+    if (!toggle) return;
+    const textOnly = toggle.checked;
+    row.classList.toggle("is-text-only", textOnly);
+    const cell = row.querySelector(".ln-desc-cell");
+    if (cell) cell.colSpan = textOnly ? 6 : 1;
+    row.querySelectorAll(".ln-num-cell").forEach(function (el) {
+      el.classList.toggle("hidden", textOnly);
+    });
+    row.querySelectorAll(".ln-qty, .ln-price, .ln-discount, .ln-vat").forEach(function (el) {
+      el.disabled = textOnly;
+    });
   }
 
   function openDocumentForm(type, id, options) {
@@ -305,6 +330,7 @@
 
             '<div class="form-section">' +
               '<div class="lines-head"><div class="form-section-title" style="flex:1">Líneas</div>' +
+                '<button type="button" class="quick-line-add" data-action="add-text-line">' + icon("plus") + " Línea de texto</button>" +
                 '<button type="button" class="quick-line-add" data-action="add-line">' + icon("plus") + " Añadir línea</button>" +
               "</div>" +
               '<div class="lines-wrap"><table class="lines-table">' +
@@ -487,13 +513,16 @@
   }
 
   function readLine(row) {
+    const toggle = row.querySelector(".ln-text-only");
+    const textOnly = !!(toggle && toggle.checked);
     return {
       id: row.getAttribute("data-line-id") || Store.uid("ln_"),
       description: row.querySelector(".ln-desc").value.trim(),
-      qty: Store.num(row.querySelector(".ln-qty").value),
-      price: Store.num(row.querySelector(".ln-price").value),
-      discount: Store.num(row.querySelector(".ln-discount").value),
-      vat: Store.num(row.querySelector(".ln-vat").value)
+      qty: textOnly ? 0 : Store.num(row.querySelector(".ln-qty").value),
+      price: textOnly ? 0 : Store.num(row.querySelector(".ln-price").value),
+      discount: textOnly ? 0 : Store.num(row.querySelector(".ln-discount").value),
+      vat: textOnly ? 0 : Store.num(row.querySelector(".ln-vat").value),
+      textOnly: textOnly
     };
   }
 
@@ -523,10 +552,11 @@
     const totals = Store.computeTotals(doc);
 
     $$(".line-row", form).forEach(function (row) {
+      applyLineMode(row);
       const line = readLine(row);
       const base = Store.num(line.qty) * Store.num(line.price) * (1 - Store.num(line.discount) / 100);
       const cell = row.querySelector(".line-total");
-      if (cell) cell.textContent = Store.fmtMoney(base);
+      if (cell) cell.textContent = base > 0 ? Store.fmtMoney(base) : "—";
     });
 
     const setText = function (id, value) {
@@ -618,10 +648,11 @@
     void previous;
   }
 
-  function addLine() {
+  function addLine(textOnly) {
     const body = document.getElementById("doc-lines-body");
     if (!body) return;
     const line = emptyLine();
+    if (textOnly) line.textOnly = true;
     body.insertAdjacentHTML("beforeend", lineRowHTML(line));
     recalcDocForm();
     const rows = $$(".line-row", body);
@@ -708,14 +739,20 @@
     ].filter(Boolean);
 
     const itemsRows = (doc.lines || []).map(function (line) {
-      const base = Store.num(line.qty) * Store.num(line.price) * (1 - Store.num(line.discount) / 100);
+      const colCount = 5 + (hasLineDiscount ? 1 : 0);
+      if (line.textOnly) {
+        return '<tr class="item-text"><td colspan="' + colCount + '">' + esc(line.description) + "</td></tr>";
+      }
+      const qty = Store.num(line.qty);
+      const price = Store.num(line.price);
+      const base = qty * price * (1 - Store.num(line.discount) / 100);
       return "<tr>" +
         "<td>" + esc(line.description) + "</td>" +
-        '<td class="num">' + esc(fmtQty(line.qty)) + "</td>" +
-        '<td class="num">' + esc(Store.fmtMoney(line.price)) + "</td>" +
+        '<td class="num">' + (qty > 0 ? esc(fmtQty(qty)) : "—") + "</td>" +
+        '<td class="num">' + (price > 0 ? esc(Store.fmtMoney(price)) : "—") + "</td>" +
         (hasLineDiscount ? '<td class="num">' + (Store.num(line.discount) > 0 ? esc(Store.fmtNumber(line.discount, 2)) + "%" : "—") + "</td>" : "") +
-        '<td class="num">' + esc(vatLabel(line.vat)) + "</td>" +
-        '<td class="num">' + esc(Store.fmtMoney(base)) + "</td>" +
+        '<td class="num">' + (base > 0 ? esc(vatLabel(line.vat)) : "—") + "</td>" +
+        '<td class="num">' + (base > 0 ? esc(Store.fmtMoney(base)) : "—") + "</td>" +
       "</tr>";
     }).join("");
 

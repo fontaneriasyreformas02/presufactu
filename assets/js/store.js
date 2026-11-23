@@ -238,6 +238,7 @@
         line.price = num(line.price);
         line.discount = num(line.discount);
         line.vat = num(line.vat);
+        line.textOnly = !!line.textOnly;
       });
       doc.globalDiscount = num(doc.globalDiscount);
       doc.irpfRate = num(doc.irpfRate);
@@ -378,9 +379,11 @@
 
     var vatGroups = {};
     lines.forEach(function (line) {
+      if (line.textOnly) return;
       var gross = num(line.qty) * num(line.price);
       var lineBase = gross * (1 - num(line.discount) / 100);
       grossBase += lineBase;
+      if (lineBase === 0) return;
       var rate = num(line.vat);
       vatGroups[rate] = (vatGroups[rate] || 0) + lineBase * globalFactor;
     });
@@ -552,9 +555,9 @@
     if (!doc.number || !String(doc.number).trim()) return "El número de documento es obligatorio.";
     if (!doc.issueDate) return "La fecha de emisión es obligatoria.";
     var validLines = (doc.lines || []).filter(function (l) {
-      return String(l.description || "").trim() && num(l.qty) > 0;
+      return String(l.description || "").trim();
     });
-    if (!validLines.length) return "Añade al menos una línea con descripción y cantidad.";
+    if (!validLines.length) return "Añade al menos una línea con descripción.";
     return null;
   }
 
@@ -721,7 +724,7 @@
         t.irpfAmount,
         t.total,
         state.settings.currency.code,
-        (d.lines || []).map(function (l) { return l.description + " x" + l.qty; }).join(" | "),
+        (d.lines || []).map(function (l) { return l.textOnly ? l.description : l.description + " x" + l.qty; }).join(" | "),
         d.notes
       ];
     });
