@@ -143,8 +143,22 @@
     return out;
   }
 
+  /* Algunos importadores antiguos guardaron el símbolo del euro como
+     "Ôé¼" (bytes UTF-8 leídos como CP437). Lo normalizamos al cargar. */
+  function normalizeCurrencySymbol(symbol) {
+    var value = String(symbol === undefined || symbol === null ? "" : symbol);
+    var cleaned = value
+      .replace(/Ôé¼/g, "€")
+      .replace(/â‚¬/g, "€")
+      .replace(/â¬/g, "€");
+    return cleaned.trim();
+  }
+
   function sanitizeState(raw) {
     var merged = mergeDefaults(raw, clone(DEFAULTS));
+    if (merged.settings && merged.settings.currency) {
+      merged.settings.currency.symbol = normalizeCurrencySymbol(merged.settings.currency.symbol);
+    }
     if (!Array.isArray(merged.clients)) merged.clients = [];
     if (!Array.isArray(merged.documents)) merged.documents = [];
     if (!merged.meta) merged.meta = clone(DEFAULTS.meta);
