@@ -244,6 +244,9 @@
     if (c.dirty && localDocs > 0) return null;
 
     syncBusy = true;
+    // Avisamos siempre al terminar, también si no hay cambios o si falla.
+    // Si no, el indicador se queda en "Sincronizando…" aunque ya acabó.
+    var outcome = { status: "ok", message: "", extra: { silent: true } };
     try {
       var data;
       try {
@@ -251,6 +254,7 @@
       } catch (err) {
         c.lastError = err.message;
         Store.save({ emit: false, touchMeta: false });
+        outcome = { status: "error", message: err.message, extra: {} };
         return null;
       }
       if (!data || !data.state) return null;
@@ -278,10 +282,11 @@
       }
 
       applyPulledState(data);
-      notify("ok", syncSummary("Datos actualizados desde Google Sheets"), { at: cfg().lastSync, pulled: true });
+      outcome = { status: "ok", message: syncSummary("Datos actualizados desde Google Sheets"), extra: { at: cfg().lastSync, pulled: true } };
       return data;
     } finally {
       syncBusy = false;
+      notify(outcome.status, outcome.message, outcome.extra);
     }
   }
 
