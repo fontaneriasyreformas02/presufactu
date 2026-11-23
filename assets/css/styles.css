@@ -1239,6 +1239,15 @@ table.data tr.row-click { cursor: pointer; }
 /* ============================ IMPRESIÓN ============================ */
 #print-root { display: none; }
 
+/* Contenedor oculto usado para generar el PDF con html2canvas.
+   Reproduce el aspecto de la impresión: A4 con márgenes de 12 mm
+   (186 mm de ancho útil ≈ 703 px a 96 ppp). */
+.pdf-render { position: fixed; left: -10000px; top: 0; width: 703px; background: #fff; pointer-events: none; }
+.pdf-render .paper { width: 100%; max-width: none; padding: 0; margin: 0; box-shadow: none; border-radius: 0; font-size: 10.5px; }
+.pdf-render .paper-head { padding-bottom: 16px; }
+.pdf-render .paper table.items tr { page-break-inside: avoid; }
+.pdf-render .paper-footer { margin-top: 24px; }
+
 @media print {
   @page { size: A4; margin: 12mm; }
   html, body { background: #fff !important; }

@@ -123,6 +123,39 @@
           PF.printDoc(id);
           break;
 
+        case "save-pdf": {
+          event.preventDefault();
+          const doc = Store.getDocument(id);
+          if (!doc) break;
+          const original = target.innerHTML;
+          target.disabled = true;
+          target.innerHTML = PF.icon("refresh") + " Generando…";
+          try {
+            const name = await PF.savePdfToFolder(doc);
+            PF.toast("PDF guardado: " + name, "success");
+          } catch (err) {
+            PF.toast(err && err.message ? err.message : "No se pudo guardar el PDF.", "error");
+          } finally {
+            target.disabled = false;
+            target.innerHTML = original;
+          }
+          break;
+        }
+
+        case "choose-pdf-folder":
+          event.preventDefault();
+          try {
+            await PF.choosePdfFolder();
+          } catch (err) {
+            PF.toast(err && err.message ? err.message : "No se pudo elegir la carpeta.", "error");
+          }
+          break;
+
+        case "remove-pdf-folder":
+          event.preventDefault();
+          await PF.removePdfFolder();
+          break;
+
         case "add-line":
           event.preventDefault();
           PF.addLine();
@@ -339,6 +372,10 @@
     if (target.closest && target.closest("#doc-form")) {
       PF.recalcDocForm();
       if (target.name === "clientId") PF.refreshClientHint();
+      return;
+    }
+    if (target.id === "pdf-auto-create") {
+      PF.setPdfAutoCreate(target.checked);
       return;
     }
     if (target.id === "logo-file") {

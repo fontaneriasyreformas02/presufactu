@@ -645,6 +645,7 @@
     PF.updateShell();
     PF.renderRoute(PF.currentRouteName());
     PF.toast((id ? "Documento actualizado: " : "Documento creado: ") + saved.number, "success");
+    if (!id) PF.autoSavePdf(saved);
     void previous;
   }
 
@@ -681,7 +682,11 @@
     const unpaid = doc.type === "invoice" && ["issued", "overdue"].indexOf(Store.effectiveStatus(doc)) !== -1;
     const canConvert = doc.type === "quote" && ["draft", "sent", "accepted"].indexOf(doc.status) !== -1;
 
+    const savePdfBtn = PF.pdfFolderInfo().configured
+      ? '<button type="button" class="btn btn-soft" data-action="save-pdf" data-id="' + esc(doc.id) + '">' + icon("download") + " Guardar PDF</button>"
+      : "";
     const leftButtons =
+      savePdfBtn +
       '<button type="button" class="btn" data-action="print-doc" data-id="' + esc(doc.id) + '">' + icon("print") + " Imprimir / PDF</button>" +
       '<button type="button" class="btn" data-action="duplicate-doc" data-id="' + esc(doc.id) + '">' + icon("copy") + " Duplicar</button>" +
       (canConvert ? '<button type="button" class="btn btn-soft" data-action="convert-doc" data-id="' + esc(doc.id) + '">' + icon("arrow-right") + " Facturar</button>" : "") +
@@ -989,6 +994,7 @@
     }
     setTimeout(function () { openPreview(invoice.id); }, 150);
     PF.toast("Factura " + invoice.number + " creada desde el presupuesto.", "success");
+    PF.autoSavePdf(invoice);
   }
 
   async function markPaid(id) {
@@ -1038,6 +1044,7 @@
     removeLine: removeLine,
     openPreview: openPreview,
     paperHTML: paperHTML,
+    pdfFileName: pdfFileName,
     printDoc: printDoc,
     duplicateDoc: duplicateDoc,
     convertDoc: convertDoc,

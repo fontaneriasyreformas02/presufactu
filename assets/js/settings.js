@@ -17,6 +17,7 @@
     ["moneda", "Moneda", "coins"],
     ["numeracion", "Numeración", "hash"],
     ["facturacion", "Facturación", "receipt"],
+    ["pdf", "Documentos PDF", "folder"],
     ["sheets", "Google Sheets", "cloud"],
     ["seguridad", "Seguridad", "shield"],
     ["datos", "Datos", "database"]
@@ -51,6 +52,7 @@
           currencyCard(settings) +
           numberingCard(settings) +
           billingCard(settings) +
+          pdfCard() +
           sheetsCard(settings) +
           securityCard() +
           dataCard() +
@@ -60,6 +62,7 @@
     PF.updateSyncUI();
     updateCurrencyPreview();
     updateNumberingPreview();
+    PF.refreshPdfCard();
   }
 
   /* ========================= EMPRESA ========================= */
@@ -209,6 +212,34 @@
         '<div class="settings-foot"><span class="desc">Los nuevos documentos usarán estos valores por defecto.</span>' +
           '<button type="submit" class="btn btn-primary">Guardar facturación</button></div>' +
       "</form>" +
+    "</section>";
+  }
+
+  /* ========================= DOCUMENTOS PDF ========================= */
+
+  function pdfCard() {
+    return '<section class="card settings-card" id="settings-pdf">' +
+      cardHead("folder", "Documentos PDF", "Guarda los PDF de presupuestos y facturas en una carpeta de tu equipo") +
+      '<div class="settings-body">' +
+        '<div class="sync-status-box" id="pdf-folder-status"></div>' +
+        '<div class="btn-row">' +
+          '<button type="button" class="btn" data-action="choose-pdf-folder">' + icon("folder") + " Elegir carpeta…</button>" +
+          '<button type="button" class="btn btn-ghost" data-action="remove-pdf-folder">Quitar carpeta</button>' +
+        "</div>" +
+        '<label class="inline-check" style="margin-top:14px"><input type="checkbox" id="pdf-auto-create">' +
+          "<span>Guardar PDF automáticamente al crear documentos<span class=\"hint\">Al crear un presupuesto o una factura, o al convertir un presupuesto en factura, el PDF se guarda en la carpeta sin abrir el diálogo de impresión.</span></span></label>" +
+        '<details class="help-details" style="margin-top:14px">' +
+          "<summary>Cómo funciona el guardado en carpeta</summary>" +
+          '<div class="help-body"><ol>' +
+            "<li>Pulsa <strong>«Elegir carpeta…»</strong> y selecciona la carpeta donde quieres guardar los PDF (por ejemplo, <code>Documentos\\Facturas</code>). Solo hay que hacerlo una vez.</li>" +
+            "<li>En la vista previa de cada documento aparece el botón <strong>«Guardar PDF»</strong>, que genera el PDF y lo guarda directamente en esa carpeta, sin diálogo.</li>" +
+            "<li>El nombre del archivo es el número del documento y el cliente, por ejemplo <code>FAC-2026-0080 - Cliente Prueba.pdf</code>. Si ya existe un archivo con ese nombre, se sustituye por la versión nueva.</li>" +
+            "<li>Con la casilla de arriba activada, el PDF también se guarda solo al crear o convertir documentos.</li>" +
+          "</ol>" +
+          '<p class="mt-2"><strong>Requisitos:</strong> funciona en Chrome y Edge. Al reabrir la aplicación, el navegador puede volver a pedir permiso la primera vez que guardes un PDF. Esta carpeta es solo de este dispositivo: no se sincroniza con Google Sheets. En otros navegadores, usa «Imprimir / PDF».</p>' +
+          "</div>" +
+        "</details>" +
+      "</div>" +
     "</section>";
   }
 
