@@ -851,11 +851,28 @@
     return "";
   }
 
+  /* El nombre sugerido al guardar como PDF lo toma el navegador del título
+     de la página. Lo cambiamos temporalmente a "NÚMERO - Cliente". */
+  function pdfFileName(doc) {
+    const client = doc.clientSnapshot && doc.clientSnapshot.name
+      ? doc.clientSnapshot.name
+      : ((Store.getClient(doc.clientId) || {}).name || "");
+    const raw = [doc.number, client].filter(Boolean).join(" - ");
+    const clean = raw.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+    return clean.slice(0, 120) || "documento";
+  }
+
   function printDoc(id) {
     const doc = Store.getDocument(id);
     if (!doc) return;
     $("#print-root").innerHTML = paperHTML(doc);
+    const prevTitle = document.title;
+    document.title = pdfFileName(doc);
     setTimeout(function () { window.print(); }, 80);
+    window.addEventListener("afterprint", function restore() {
+      document.title = prevTitle;
+      window.removeEventListener("afterprint", restore);
+    });
   }
 
   /* ========================= ACCIONES ========================= */
