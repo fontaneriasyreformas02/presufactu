@@ -305,7 +305,7 @@
     return buildNumber(prefix, Math.max(1, counter), currentYear, cfg);
   }
 
-  function registerNumber(type, number) {
+  function registerNumber(type, number, force) {
     var cfg = state.settings.numbering;
     var currentYear = new Date().getFullYear();
     var match = String(number || "").match(/(\d+)\s*$/);
@@ -314,11 +314,12 @@
     if (!isFinite(n)) return;
     var isNewYear = cfg.resetYearly && num(cfg.year) !== currentYear;
     if (cfg.resetYearly) cfg.year = currentYear;
-    if (type === "invoice") {
-      cfg.nextInvoice = isNewYear ? Math.max(1, n + 1) : Math.max(num(cfg.nextInvoice) || 1, n + 1);
-    } else {
-      cfg.nextQuote = isNewYear ? Math.max(1, n + 1) : Math.max(num(cfg.nextQuote) || 1, n + 1);
-    }
+    var current = type === "invoice" ? num(cfg.nextInvoice) : num(cfg.nextQuote);
+    // force: el usuario editó el número previsto al crear/convertir; Ajustes debe
+    // continuar exactamente desde ese número, no desde el contador anterior.
+    var next = (force || isNewYear) ? Math.max(1, n + 1) : Math.max(current || 1, n + 1);
+    if (type === "invoice") cfg.nextInvoice = next;
+    else cfg.nextQuote = next;
   }
 
   function recalculateCounters() {
@@ -484,7 +485,8 @@
     return state.documents.filter(function (d) { return d.id === id; })[0] || null;
   }
 
-  function saveDocument(data, id) {
+  function saveDocument(data, id, options) {
+    options = options || {};
     var now = new Date().toISOString();
     var doc;
     if (id) {
@@ -500,7 +502,7 @@
       var client = getClient(doc.clientId);
       if (client) doc.clientSnapshot = snapshotClient(client);
     }
-    registerNumber(doc.type, doc.number);
+    registerNumber(doc.type, doc.number, !!options.forceNumber);
     save();
     return doc;
   }

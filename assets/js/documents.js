@@ -287,7 +287,10 @@
             '<div class="form-section">' +
               '<div class="form-section-title">Datos del documento</div>' +
               '<div class="form-grid">' +
-                '<label class="field"><span>Número *</span><input type="text" name="number" value="' + esc(doc.number) + '" required></label>' +
+                '<label class="field"><span>Número *' + (type === "invoice" && !isEdit ? ' <span class="muted" style="font-weight:400">(previsto, editable)</span>' : "") + '</span>' +
+                  '<input type="text" name="number" value="' + esc(doc.number) + '" required>' +
+                  (type === "invoice" && !isEdit ? '<span class="small muted">Según la numeración de Ajustes. Si lo cambias, la numeración se actualizará y las siguientes facturas continuarán desde ese número.</span>' : "") +
+                "</label>" +
                 '<label class="field"><span>Estado</span><select name="status">' + statusOptions(type, doc.status) + "</select></label>" +
                 '<label class="field"><span>Fecha de emisión *</span><input type="date" name="issueDate" value="' + esc(doc.issueDate) + '" required></label>' +
                 '<label class="field"><span>' + (type === "invoice" ? "Vencimiento" : "Válido hasta") + '</span><input type="date" name="dueDate" value="' + esc(doc.dueDate) + '"></label>' +
@@ -595,7 +598,7 @@
       doc.paidDate = "";
     }
 
-    const saved = Store.saveDocument(doc, id || null);
+    const saved = Store.saveDocument(doc, id || null, { forceNumber: !id && doc.type === "invoice" });
     PF.closeTopModal();
     PF.updateShell();
     PF.renderRoute(PF.currentRouteName());
@@ -820,18 +823,68 @@
       PF.toast("Este presupuesto ya se convirtió en factura.", "warning");
       return;
     }
-    const ok = await PF.confirmDialog({
-      title: "Convertir en factura",
-      message: "Se creará una factura con las líneas y el cliente del presupuesto <strong>" + esc(quote.number) +
-        "</strong>. El presupuesto quedará marcado como facturado.",
-      confirmText: "Crear factura"
+    const preview = Store.peekNumber("invoice");
+    const invoiceNumber = await new Promise(function (resolve) {
+      let settled = false;
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      }
+      const overlay = PF.openModal({
+        title: "Convertir en factura",
+        subtitle: "Revisa y edita el número que se generará",
+        size: "sm",
+        content:
+          '<p class="confirm-text">Se creará una factura con las líneas y el cliente del presupuesto <strong>' + esc(quote.number) +
+          "</strong>. El presupuesto quedará marcado como facturado.</p>" +
+          '<label class="field" style="margin-top:14px"><span>Número de factura * <span class="muted" style="font-weight:400">(editable)</span></span>' +
+            '<input type="text" id="convert-invoice-number" value="' + esc(preview) + '" required autocomplete="off">' +
+            '<span class="small muted">Número previsto según Ajustes. Si lo cambias, la numeración se actualizará y las siguientes facturas continuarán desde ese número.</span>' +
+          "</label>" +
+          '<div id="convert-number-error" class="form-error hidden"></div>',
+        footer:
+          '<button type="button" class="btn btn-ghost" data-close="1">Cancelar</button>' +
+          '<button type="button" class="btn btn-primary" id="convert-confirm" style="margin-left:auto">Crear factura</button>',
+        onClose: function () { finish(null); }
+      });
+      const input = overlay.querySelector("#convert-invoice-number");
+      const errorEl = overlay.querySelector("#convert-number-error");
+      const fail = function (message) {
+        if (errorEl) {
+          errorEl.textContent = message;
+          errorEl.classList.remove("hidden");
+        }
+        if (input) input.focus();
+      };
+      const confirm = function () {
+        const value = input ? input.value.trim() : "";
+        if (!value) return fail("Escribe el número de factura.");
+        const duplicate = S().documents.some(function (other) {
+          return other.type === "invoice" && String(other.number).toLowerCase() === value.toLowerCase();
+        });
+        if (duplicate) return fail("Ya existe una factura con el número " + value + ".");
+        finish(value);
+        PF.closeModal(overlay);
+      };
+      const confirmBtn = overlay.querySelector("#convert-confirm");
+      if (confirmBtn) confirmBtn.addEventListener("click", confirm);
+      if (input) {
+        input.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            confirm();
+          }
+        });
+        setTimeout(function () { input.focus(); input.select(); }, 70);
+      }
     });
-    if (!ok) return;
+    if (!invoiceNumber) return;
 
     const settings = S().settings;
     const invoice = Store.saveDocument({
       type: "invoice",
-      number: Store.peekNumber("invoice"),
+      number: invoiceNumber,
       status: "issued",
       issueDate: Store.todayISO(),
       dueDate: Store.addDays(Store.todayISO(), Number(settings.billing.defaultPaymentDays) || 0),
@@ -844,7 +897,7 @@
       irpfRate: quote.irpfRate,
       notes: quote.notes,
       lines: Store.clone(quote.lines)
-    });
+    }, null, { forceNumber: true });
     Store.saveDocument({ status: "invoiced", invoiceId: invoice.id }, quote.id);
     PF.closeAllModals();
     PF.updateShell();
