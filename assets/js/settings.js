@@ -85,6 +85,7 @@
           "</div>" +
           '<div class="form-grid">' +
             '<label class="field span-2"><span>Nombre o razón social *</span><input type="text" name="name" value="' + esc(c.name) + '" placeholder="Ej. Estudio Sierra S.L." required></label>' +
+            '<label class="field span-2"><span>Nombre comercial en presupuestos</span><input type="text" name="quoteName" value="' + esc(c.quoteName) + '" placeholder="FONTANERIA &amp; REFORMAS"><span class="hint">Se mostrará en los presupuestos en lugar de la razón social. Las facturas siguen usando la razón social de arriba.</span></label>' +
             '<label class="field"><span>NIF / CIF</span><input type="text" name="nif" value="' + esc(c.nif) + '" placeholder="B12345678"></label>' +
             '<label class="field"><span>Teléfono</span><input type="tel" name="phone" value="' + esc(c.phone) + '" placeholder="912 345 678"></label>' +
             '<label class="field span-2"><span>Dirección</span><input type="text" name="address" value="' + esc(c.address) + '" placeholder="Calle, número, piso…"></label>' +
@@ -419,6 +420,7 @@
     const current = S().settings.company;
     S().settings.company = {
       name: form.elements.name.value.trim(),
+      quoteName: form.elements.quoteName.value.trim(),
       nif: form.elements.nif.value.trim(),
       address: form.elements.address.value.trim(),
       zip: form.elements.zip.value.trim(),

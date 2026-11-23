@@ -185,6 +185,7 @@
     return {
       type: type,
       number: Store.peekNumber(type),
+      companyName: "",
       status: type === "invoice" ? "issued" : "draft",
       issueDate: today,
       dueDate: Store.addDays(today, Number(days) || 0),
@@ -291,6 +292,9 @@
                   '<input type="text" name="number" value="' + esc(doc.number) + '" required>' +
                   (type === "invoice" && !isEdit ? '<span class="small muted">Según la numeración de Ajustes. Si lo cambias, la numeración se actualizará y las siguientes facturas continuarán desde ese número.</span>' : "") +
                 "</label>" +
+                (type === "invoice"
+                  ? '<label class="field"><span>Razón social (emisor)</span><input type="text" name="companyName" value="' + esc(doc.companyName || S().settings.company.name) + '"><span class="small muted">Solo aparecerá en esta factura. No modifica el nombre de Ajustes.</span></label>'
+                  : "") +
                 '<label class="field"><span>Estado</span><select name="status">' + statusOptions(type, doc.status) + "</select></label>" +
                 '<label class="field"><span>Fecha de emisión *</span><input type="date" name="issueDate" value="' + esc(doc.issueDate) + '" required></label>' +
                 '<label class="field"><span>' + (type === "invoice" ? "Vencimiento" : "Válido hasta") + '</span><input type="date" name="dueDate" value="' + esc(doc.dueDate) + '"></label>' +
@@ -497,6 +501,7 @@
     return {
       type: form.getAttribute("data-doc-type"),
       number: form.elements.number.value.trim(),
+      companyName: form.elements.companyName ? form.elements.companyName.value.trim() : "",
       status: form.elements.status.value,
       issueDate: form.elements.issueDate.value,
       dueDate: form.elements.dueDate.value,
@@ -569,9 +574,16 @@
     hint.textContent = parts.join(" · ");
   }
 
+  function normalizeCompanyName(value) {
+    const globalName = String(S().settings.company.name || "").trim();
+    const name = String(value || "").trim();
+    return name && name !== globalName ? name : "";
+  }
+
   function saveDocForm(form) {
     const id = form.getAttribute("data-doc-id") || "";
     const doc = readDocForm(form);
+    if (doc.type === "invoice") doc.companyName = normalizeCompanyName(doc.companyName);
     doc.lines = doc.lines.filter(function (line) {
       return line.description || Store.num(line.qty) > 0 || Store.num(line.price) > 0;
     });
@@ -668,6 +680,9 @@
     const settings = S().settings;
     const company = settings.company;
     const isInvoice = doc.type === "invoice";
+    const issuerName = isInvoice
+      ? (doc.companyName || company.name)
+      : (company.quoteName || company.name);
     const client = doc.clientSnapshot && doc.clientSnapshot.name
       ? doc.clientSnapshot
       : Store.snapshotClient(Store.getClient(doc.clientId));
@@ -729,7 +744,7 @@
     if (company.iban) footerLines.push("IBAN: " + company.iban);
     if (legal) footerLines.push(legal);
     const fiscal = [
-      company.name,
+      issuerName,
       company.nif ? "NIF/CIF: " + company.nif : "",
       [company.address, [company.zip, company.city].filter(Boolean).join(" "), company.country].filter(Boolean).join(", "),
       company.phone ? "Tel. " + company.phone : "",
@@ -743,7 +758,7 @@
         '<div class="paper-company">' +
           (company.logo ? '<img class="paper-logo" src="' + esc(company.logo) + '" alt="Logo de la empresa">' : "") +
           "<div>" +
-            "<h1>" + esc(company.name || "Tu empresa") + "</h1>" +
+            "<h1>" + esc(issuerName || "Tu empresa") + "</h1>" +
             '<div class="paper-meta">' + companyLines.map(esc).join("<br>") + "</div>" +
           "</div>" +
         "</div>" +
@@ -824,7 +839,7 @@
       return;
     }
     const preview = Store.peekNumber("invoice");
-    const invoiceNumber = await new Promise(function (resolve) {
+    const converted = await new Promise(function (resolve) {
       let settled = false;
       function finish(value) {
         if (settled) return;
@@ -833,7 +848,7 @@
       }
       const overlay = PF.openModal({
         title: "Convertir en factura",
-        subtitle: "Revisa y edita el número que se generará",
+        subtitle: "Revisa el número y la razón social de la factura",
         size: "sm",
         content:
           '<p class="confirm-text">Se creará una factura con las líneas y el cliente del presupuesto <strong>' + esc(quote.number) +
@@ -842,6 +857,10 @@
             '<input type="text" id="convert-invoice-number" value="' + esc(preview) + '" required autocomplete="off">' +
             '<span class="small muted">Número previsto según Ajustes. Si lo cambias, la numeración se actualizará y las siguientes facturas continuarán desde ese número.</span>' +
           "</label>" +
+          '<label class="field" style="margin-top:14px"><span>Razón social (emisor)</span>' +
+            '<input type="text" id="convert-company-name" value="' + esc(S().settings.company.name) + '" required autocomplete="off">' +
+            '<span class="small muted">Solo aparecerá en esta factura. No modifica el nombre de Ajustes.</span>' +
+          "</label>" +
           '<div id="convert-number-error" class="form-error hidden"></div>',
         footer:
           '<button type="button" class="btn btn-ghost" data-close="1">Cancelar</button>' +
@@ -849,6 +868,7 @@
         onClose: function () { finish(null); }
       });
       const input = overlay.querySelector("#convert-invoice-number");
+      const companyInput = overlay.querySelector("#convert-company-name");
       const errorEl = overlay.querySelector("#convert-number-error");
       const fail = function (message) {
         if (errorEl) {
@@ -864,7 +884,13 @@
           return other.type === "invoice" && String(other.number).toLowerCase() === value.toLowerCase();
         });
         if (duplicate) return fail("Ya existe una factura con el número " + value + ".");
-        finish(value);
+        const companyName = companyInput ? companyInput.value.trim() : "";
+        if (!companyName) {
+          errorEl.textContent = "Escribe la razón social del emisor.";
+          errorEl.classList.remove("hidden");
+          return;
+        }
+        finish({ number: value, companyName: companyName });
         PF.closeModal(overlay);
       };
       const confirmBtn = overlay.querySelector("#convert-confirm");
@@ -879,12 +905,13 @@
         setTimeout(function () { input.focus(); input.select(); }, 70);
       }
     });
-    if (!invoiceNumber) return;
+    if (!converted) return;
 
     const settings = S().settings;
     const invoice = Store.saveDocument({
       type: "invoice",
-      number: invoiceNumber,
+      number: converted.number,
+      companyName: normalizeCompanyName(converted.companyName),
       status: "issued",
       issueDate: Store.todayISO(),
       dueDate: Store.addDays(Store.todayISO(), Number(settings.billing.defaultPaymentDays) || 0),

@@ -59,6 +59,7 @@
     settings: {
       company: {
         name: "",
+        quoteName: "FONTANERIA & REFORMAS",
         nif: "",
         address: "",
         city: "",
