@@ -143,22 +143,68 @@
     return out;
   }
 
-  /* Algunos importadores antiguos guardaron el símbolo del euro como
-     "Ôé¼" (bytes UTF-8 leídos como CP437). Lo normalizamos al cargar. */
-  function normalizeCurrencySymbol(symbol) {
-    var value = String(symbol === undefined || symbol === null ? "" : symbol);
-    var cleaned = value
+  /* Algunos importadores antiguos guardaron texto UTF-8 interpretado como
+     CP437/CP850 ("ñ" -> "├▒", "á" -> "├í", "€" -> "Ôé¼"). Lo reparamos
+     al cargar, tanto desde el navegador como desde Google Sheets. */
+  var CP437_HIGH =
+    "ÇüéâäàåçêëèïîìÄÅ" +
+    "ÉæÆôöòûùÿÖÜø£¥₧ƒ" +
+    "áíóúñÑªº¿®¬½¼¡«»" +
+    "░▒▓│┤╡╢╖╕╣║╗╝╜╛┐" +
+    "└┴┬├─┼╞╟╚╔╩╦╠═╬╧" +
+    "╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀" +
+    "αßΓπΣσµτΦΘΩδ∞φε∩" +
+    "≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0";
+
+  var MOJIBAKE_MAP = (function () {
+    var list = [];
+    for (var cp = 0x80; cp <= 0x24f; cp++) {
+      var good = String.fromCharCode(cp);
+      var bytes = [];
+      if (cp < 0x800) {
+        bytes.push(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
+      } else {
+        bytes.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+      }
+      var bad = "";
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        bad += b < 0x80 ? String.fromCharCode(b) : CP437_HIGH.charAt(b - 0x80);
+      }
+      if (bad !== good) list.push([bad, good]);
+    }
+    list.sort(function (a, b) { return b[0].length - a[0].length; });
+    return list;
+  })();
+
+  function fixMojibake(value) {
+    if (typeof value !== "string" || value.length > 5000) return value;
+    var out = value
       .replace(/Ôé¼/g, "€")
       .replace(/â‚¬/g, "€")
       .replace(/â¬/g, "€");
-    return cleaned.trim();
+    for (var i = 0; i < MOJIBAKE_MAP.length; i++) {
+      var pair = MOJIBAKE_MAP[i];
+      if (out.indexOf(pair[0]) !== -1) out = out.split(pair[0]).join(pair[1]);
+    }
+    return out;
+  }
+
+  function fixMojibakeDeep(value) {
+    if (typeof value === "string") return fixMojibake(value);
+    if (Array.isArray(value)) {
+      value.forEach(function (item, index) { value[index] = fixMojibakeDeep(item); });
+      return value;
+    }
+    if (isPlainObject(value)) {
+      Object.keys(value).forEach(function (key) { value[key] = fixMojibakeDeep(value[key]); });
+      return value;
+    }
+    return value;
   }
 
   function sanitizeState(raw) {
-    var merged = mergeDefaults(raw, clone(DEFAULTS));
-    if (merged.settings && merged.settings.currency) {
-      merged.settings.currency.symbol = normalizeCurrencySymbol(merged.settings.currency.symbol);
-    }
+    var merged = fixMojibakeDeep(mergeDefaults(raw, clone(DEFAULTS)));
     if (!Array.isArray(merged.clients)) merged.clients = [];
     if (!Array.isArray(merged.documents)) merged.documents = [];
     if (!merged.meta) merged.meta = clone(DEFAULTS.meta);
