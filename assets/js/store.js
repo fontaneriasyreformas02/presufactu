@@ -203,6 +203,22 @@
     return value;
   }
 
+  function findClientIn(clients, id) {
+    if (!id) return null;
+    for (var i = 0; i < clients.length; i++) {
+      if (clients[i] && clients[i].id === id) return clients[i];
+    }
+    return null;
+  }
+
+  function refreshClientSnapshots(target) {
+    var clients = Array.isArray(target.clients) ? target.clients : [];
+    (target.documents || []).forEach(function (doc) {
+      var client = findClientIn(clients, doc.clientId);
+      if (client) doc.clientSnapshot = snapshotClient(client);
+    });
+  }
+
   function sanitizeState(raw) {
     var merged = fixMojibakeDeep(mergeDefaults(raw, clone(DEFAULTS)));
     if (!Array.isArray(merged.clients)) merged.clients = [];
@@ -226,6 +242,9 @@
       doc.irpfRate = num(doc.irpfRate);
       if (doc.type !== "invoice") doc.type = "quote";
     });
+    // La ficha del cliente es la fuente de verdad: sus cambios se reflejan
+    // en todos los documentos ya creados (también tras descargar de Sheets).
+    refreshClientSnapshots(merged);
     return merged;
   }
 
@@ -452,6 +471,7 @@
       var existing = getClient(id);
       if (!existing) throw new Error("Cliente no encontrado.");
       Object.assign(existing, data, { id: id, updatedAt: now });
+      refreshClientSnapshots(state);
       save();
       return existing;
     }
